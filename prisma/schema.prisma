@@ -1,0 +1,335 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Enums traducidos
+enum RolUsuario {
+  ADMIN
+  JEFE_DEPARTAMENTO
+  AGENTE
+  CLIENTE
+}
+
+enum EstadoTicket {
+  ABIERTO
+  EN_PROGRESO
+  EN_ESPERA
+  RESUELTO
+  CERRADO
+  CANCELADO
+}
+
+enum PrioridadTicket {
+  BAJA
+  MEDIA
+  ALTA
+  URGENTE
+}
+
+enum TipoNotificacion {
+  INFO
+  ADVERTENCIA
+  ERROR
+  EXITO
+}
+
+// Modelo Usuario mejorado
+model Usuario {
+  id              String      @id @default(uuid())
+  email           String      @unique
+  password        String
+  nombreCompleto  String
+  telefono        String?
+  rol             RolUsuario  @default(CLIENTE)
+  estaActivo      Boolean     @default(true)
+  ultimoLogin     DateTime?
+  avatar          String?     // Ruta al avatar
+  configuracion   Json?       // Configuraciones personalizadas
+  creadoEn        DateTime    @default(now())
+  actualizadoEn   DateTime    @updatedAt
+
+  // Relaciones
+  departamento        Departamento?  @relation(fields: [departamentoId], references: [id])
+  departamentoId      String?
+  
+  ticketsCreados      Ticket[]       @relation("CreadorTicket")
+  ticketsAsignados    Ticket[]       @relation("AgenteTicket")
+  comentarios         Comentario[]
+  adjuntos            Adjunto[]
+  mensajesChat        MensajeChat[]
+  notificaciones      Notificacion[]
+  registrosTrabajo    RegistroTrabajo[]
+  articulosCreados    BaseConocimiento[]
+  firmasDigitales     FirmaDigital[]
+  sesionesActivas     SesionActiva[]
+
+  @@map("usuarios")
+}
+
+// Modelo Departamento
+model Departamento {
+  id            String   @id @default(uuid())
+  nombre        String   @unique
+  descripcion   String?
+  color         String   @default("#3B82F6")
+  estaActivo    Boolean  @default(true)
+  creadoEn      DateTime @default(now())
+  actualizadoEn DateTime @updatedAt
+
+  // Relaciones
+  usuarios    Usuario[]
+  tickets     Ticket[]
+  categorias  Categoria[]
+
+  @@map("departamento")
+}
+
+// Modelo Categoría
+model Categoria {
+  id              String   @id @default(uuid())
+  nombre          String
+  descripcion     String?
+  color           String   @default("#10B981")
+  icono           String?  // Nombre del icono
+  estaActivo      Boolean  @default(true)
+  creadoEn        DateTime @default(now())
+  actualizadoEn   DateTime @updatedAt
+
+  // Relaciones
+  departamento    Departamento @relation(fields: [departamentoId], references: [id])
+  departamentoId  String
+  tickets         Ticket[]
+
+  @@unique([nombre, departamentoId])
+  @@map("categorias")
+}
+
+// Modelo Proyecto
+model Proyecto {
+  id            String    @id @default(uuid())
+  nombre        String    @unique
+  descripcion   String?
+  fechaInicio   DateTime?
+  fechaFin      DateTime?
+  presupuesto   Float?
+  estaActivo    Boolean   @default(true)
+  creadoEn      DateTime  @default(now())
+  actualizadoEn DateTime  @updatedAt
+
+  // Relaciones
+  tickets       Ticket[]
+
+  @@map("proyectos")
+}
+
+// Modelo Ticket mejorado
+model Ticket {
+  id                String           @id @default(uuid())
+  numeroTicket      String           @unique
+  asunto            String
+  descripcion       String
+  estado            EstadoTicket     @default(ABIERTO)
+  prioridad         PrioridadTicket  @default(MEDIA)
+  etiquetas         String[]         @default([])
+  horasEstimadas    Float?
+  horasReales       Float?
+  fechaVencimiento  DateTime?
+  fechaResolucion   DateTime?
+  fechaCierre       DateTime?
+  ubicacion         String?          // Dirección del trabajo
+  coordenadas       String?          // Lat,Lng para geolocalización
+  creadoEn          DateTime         @default(now())
+  actualizadoEn     DateTime         @updatedAt
+
+  // Relaciones
+  creador           Usuario          @relation("CreadorTicket", fields: [creadorId], references: [id])
+  creadorId         String
+  
+  agente            Usuario?         @relation("AgenteTicket", fields: [agenteId], references: [id])
+  agenteId          String?
+  
+  departamento      Departamento     @relation(fields: [departamentoId], references: [id])
+  departamentoId    String
+  
+  categoria         Categoria        @relation(fields: [categoriaId], references: [id])
+  categoriaId       String
+  
+  proyecto          Proyecto?        @relation(fields: [proyectoId], references: [id])
+  proyectoId        String?
+
+  comentarios       Comentario[]
+  adjuntos          Adjunto[]
+  mensajesChat      MensajeChat[]
+  registrosTrabajo  RegistroTrabajo[]
+  notificaciones    Notificacion[]
+  firmasDigitales   FirmaDigital[]
+  historialEstados  HistorialEstado[]
+
+  @@map("tickets")
+}
+
+// Modelo Comentario
+model Comentario {
+  id            String   @id @default(uuid())
+  contenido     String
+  esInterno     Boolean  @default(false)
+  creadoEn      DateTime @default(now())
+  actualizadoEn DateTime @updatedAt
+
+  // Relaciones
+  autor         Usuario  @relation(fields: [autorId], references: [id])
+  autorId       String
+  
+  ticket        Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  ticketId      String
+
+  @@map("comentarios")
+}
+
+// Modelo Adjunto mejorado
+model Adjunto {
+  id              String   @id @default(uuid())
+  nombreArchivo   String
+  nombreOriginal  String
+  tipoMime        String
+  tamanio          Int
+  ruta            String
+  esImagen        Boolean  @default(false)
+  ancho           Int?     // Para imágenes
+  alto            Int?     // Para imágenes
+  creadoEn        DateTime @default(now())
+
+  // Relaciones
+  subidoPor       Usuario  @relation(fields: [subidoPorId], references: [id])
+  subidoPorId     String
+  
+  ticket          Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  ticketId        String
+
+  @@map("adjuntos")
+}
+
+// Modelo Firma Digital (NUEVO)
+model FirmaDigital {
+  id            String   @id @default(uuid())
+  datosBase64   String   // Firma en formato base64
+  fechaFirma    DateTime @default(now())
+  
+  // Relaciones
+  firmante      Usuario  @relation(fields: [firmanteId], references: [id])
+  firmanteId    String
+  
+  ticket        Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  ticketId      String
+
+  @@map("firmas_digitales")
+}
+
+// Modelo Historial de Estados (NUEVO)
+model HistorialEstado {
+  id            String       @id @default(uuid())
+  estadoAnterior EstadoTicket?
+  estadoNuevo   EstadoTicket
+  comentario    String?
+  cambiadoEn    DateTime     @default(now())
+  
+  // Relaciones
+  ticket        Ticket       @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  ticketId      String
+
+  @@map("historial_estados")
+}
+
+// Modelo Mensaje Chat
+model MensajeChat {
+  id        String   @id @default(uuid())
+  contenido String
+  esLeido   Boolean  @default(false)
+  creadoEn  DateTime @default(now())
+
+  // Relaciones
+  remitente Usuario  @relation(fields: [remitenteId], references: [id])
+  remitenteId String
+  
+  ticket    Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  ticketId  String
+
+  @@map("mensajes_chat")
+}
+
+// Modelo Registro de Trabajo
+model RegistroTrabajo {
+  id          String   @id @default(uuid())
+  descripcion String
+  horas       Float
+  fechaTrabajo DateTime @default(now())
+  creadoEn    DateTime @default(now())
+
+  // Relaciones
+  agente      Usuario  @relation(fields: [agenteId], references: [id])
+  agenteId    String
+  
+  ticket      Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  ticketId    String
+
+  @@map("registros_trabajo")
+}
+
+// Modelo Notificación mejorado
+model Notificacion {
+  id        String            @id @default(uuid())
+  titulo    String
+  contenido String
+  tipo      TipoNotificacion  @default(INFO)
+  esLeida   Boolean           @default(false)
+  creadoEn  DateTime          @default(now())
+
+  // Relaciones
+  usuario   Usuario           @relation(fields: [usuarioId], references: [id])
+  usuarioId String
+  
+  ticket    Ticket?           @relation(fields: [ticketId], references: [id])
+  ticketId  String?
+
+  @@map("notificaciones")
+}
+
+// Modelo Base de Conocimiento
+model BaseConocimiento {
+  id            String   @id @default(uuid())
+  titulo        String
+  contenido     String
+  etiquetas     String[] @default([])
+  esPublico     Boolean  @default(true)
+  vistas        Int      @default(0)
+  creadoEn      DateTime @default(now())
+  actualizadoEn DateTime @updatedAt
+
+  // Relaciones
+  autor         Usuario  @relation(fields: [autorId], references: [id])
+  autorId       String
+
+  @@map("base_conocimiento")
+}
+
+// Modelo Sesión Activa (NUEVO - para seguridad)
+model SesionActiva {
+  id            String   @id @default(uuid())
+  token         String   @unique
+  direccionIP   String
+  userAgent     String
+  esMovil       Boolean  @default(false)
+  creadoEn      DateTime @default(now())
+  expiraEn      DateTime
+  
+  // Relaciones
+  usuario       Usuario  @relation(fields: [usuarioId], references: [id])
+  usuarioId     String
+
+  @@map("sesiones_activas")
+}
